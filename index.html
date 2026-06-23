@@ -18,11 +18,20 @@
   <div id="root">
     <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;color:#d35a2f;font-family:sans-serif">
       <div style="text-align:center">
-        <div style="width:60px;height:60px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center">
-          <svg width="60" height="60" viewBox="0 0 48 48">
-            <rect x="9" y="6" width="2.4" height="36" fill="#d35a2f" rx="1"/>
-            <path d="M 11.4 8 L 42 14 Q 44 16 42 18 L 11.4 24 Z" fill="#f1ece1" stroke="#d35a2f" stroke-width="0.8"/>
-            <circle cx="10.2" cy="42" r="1.6" fill="#d35a2f"/>
+        <div style="margin:0 auto 14px;display:flex;align-items:center;justify-content:center">
+          <svg width="72" height="72" viewBox="0 0 64 64">
+            <rect x="10" y="4" width="2" height="56" fill="#d35a2f" rx="1"/>
+            <circle cx="11" cy="3" r="1.8" fill="#d35a2f"/>
+            <path d="M 12 8 C 28 9, 44 11, 58 14 Q 60 16, 58 18 C 44 22, 30 26, 12 28 Z" fill="#f1ece1"/>
+            <g fill="#0c0b0a">
+              <circle cx="26" cy="13.5" r="1.6"/>
+              <path d="M 22.5 15 L 25 15 L 25 21 L 22.5 21 Z"/>
+              <path d="M 24.5 15.2 L 28 15.2 L 29 18 L 27.8 20.5 L 25 20.5 Z"/>
+              <path d="M 27.5 20 L 29.5 20.4 L 31 24.5 L 29.6 25 L 28 22 Z"/>
+              <path d="M 25 20.5 L 26.5 20.5 L 25.5 25.5 L 24 25.5 Z"/>
+              <path d="M 31 14 L 32 14.4 L 30.5 26 L 29.5 25.6 Z"/>
+              <path d="M 28 16 L 31.5 14.5 L 32 15.2 L 28.5 17 Z"/>
+            </g>
           </svg>
         </div>
         <div style="letter-spacing:4px;font-size:12px;color:#6e6256">LOADING THE TRAIL…</div>
@@ -233,20 +242,31 @@
     }
     const sbReady = () => !!sb;
 
-    /* Schema (run in Supabase SQL editor):
-       create table lgnd60_users (
+    /* Schema (run in Supabase SQL editor — SAFE TO RE-RUN):
+
+       -- If you already created lgnd60_users in an older version, add the new columns:
+       alter table lgnd60_users add column if not exists legendario_num text;
+       alter table lgnd60_users add column if not exists start_date text default '2026-06-22';
+       alter table lgnd60_users add column if not exists days_data jsonb default '{}'::jsonb;
+       create unique index if not exists lgnd60_users_legendario_idx on lgnd60_users(legendario_num) where legendario_num is not null;
+
+       -- Or create from scratch:
+       create table if not exists lgnd60_users (
          user_id text primary key,
+         legendario_num text,
          name text not null,
          team text default '',
+         start_date text default '2026-06-22',
          points int default 0,
          streak int default 0,
          perfect_days int default 0,
          days_logged int default 0,
          rank text default 'Iniciado',
          last_active bigint default 0,
+         days_data jsonb default '{}'::jsonb,
          updated_at timestamp with time zone default now()
        );
-       create table lgnd60_live (
+       create table if not exists lgnd60_live (
          user_id text primary key,
          name text not null,
          team text default '',
@@ -254,7 +274,7 @@
          started_at bigint not null,
          updated_at timestamp with time zone default now()
        );
-       create table lgnd60_feed (
+       create table if not exists lgnd60_feed (
          id text primary key,
          user_id text not null,
          name text not null,
@@ -268,35 +288,61 @@
        alter table lgnd60_users enable row level security;
        alter table lgnd60_live enable row level security;
        alter table lgnd60_feed enable row level security;
+       drop policy if exists "anon all users" on lgnd60_users;
+       drop policy if exists "anon all live" on lgnd60_live;
+       drop policy if exists "anon all feed" on lgnd60_feed;
        create policy "anon all users" on lgnd60_users for all using (true) with check (true);
        create policy "anon all live"  on lgnd60_live  for all using (true) with check (true);
        create policy "anon all feed"  on lgnd60_feed  for all using (true) with check (true);
     */
 
     const api = {
-      async upsertUser(summary) {
-        lsSet(LS.ME + "_summary", summary);
-        if (!sbReady()) return false;
+      // Look up an existing brother by his Legendario # — returns full state or null
+      async loginByLegendarioNum(num) {
+        if (!sbReady() || !num) return null;
+        try {
+          const { data, error } = await sb.from("lgnd60_users")
+            .select("*").eq("legendario_num", String(num).trim()).maybeSingle();
+          if (error) { console.warn("login lookup:", error.message); return null; }
+          if (!data) return null;
+          return {
+            profile: {
+              userId: data.user_id, legendarioNum: data.legendario_num || "",
+              name: data.name, team: data.team || "",
+              startDate: data.start_date || DEFAULT_START,
+            },
+            days: data.days_data || {},
+          };
+        } catch (e) { console.warn("login failed:", e?.message); return null; }
+      },
+      async upsertUser(profile, days, stats, rankName) {
+        if (!sbReady() || !profile) return false;
         try {
           const { error } = await sb.from("lgnd60_users").upsert({
-            user_id: summary.userId, name: summary.name, team: summary.team || "",
-            points: summary.points, streak: summary.streak, perfect_days: summary.perfectDays,
-            days_logged: summary.daysLogged, rank: summary.rank, last_active: summary.lastActive,
+            user_id: profile.userId,
+            legendario_num: profile.legendarioNum || null,
+            name: profile.name, team: profile.team || "",
+            start_date: profile.startDate || DEFAULT_START,
+            points: stats.points, streak: stats.streak, perfect_days: stats.perfectDays,
+            days_logged: stats.daysLogged, rank: rankName, last_active: Date.now(),
+            days_data: days || {},
           }, { onConflict: "user_id" });
-          if (error) { console.warn("upsertUser:", error.message); return false; }
+          if (error) { console.warn("upsertUser error:", error.message || error.code || JSON.stringify(error)); return false; }
           return true;
-        } catch (e) { console.warn("upsertUser failed:", e); return false; }
+        } catch (e) { console.warn("upsertUser failed:", e?.message || String(e)); return false; }
       },
       async fetchLeaderboard() {
         if (!sbReady()) return lsGet(LS.LB) || {};
         try {
-          const { data, error } = await sb.from("lgnd60_users").select("*")
+          const { data, error } = await sb.from("lgnd60_users")
+            .select("user_id,legendario_num,name,team,points,streak,perfect_days,days_logged,rank,last_active")
             .order("perfect_days", { ascending: false }).order("streak", { ascending: false }).order("points", { ascending: false });
           if (error) { console.warn("fetchLeaderboard error:", error.message || error.code || JSON.stringify(error)); return lsGet(LS.LB) || {}; }
           const map = {};
           (data || []).forEach(r => {
             map[r.user_id] = {
-              userId: r.user_id, name: r.name, team: r.team || "",
+              userId: r.user_id, legendarioNum: r.legendario_num || "",
+              name: r.name, team: r.team || "",
               points: r.points || 0, streak: r.streak || 0, perfectDays: r.perfect_days || 0,
               daysLogged: r.days_logged || 0, rank: r.rank || "Iniciado", lastActive: Number(r.last_active) || 0,
             };
@@ -386,27 +432,43 @@
     const lbl = { display: "block", fontSize: 10.5, color: C.sub, textTransform: "uppercase", letterSpacing: 1, fontWeight: 700, marginBottom: 4 };
 
     /* ============================== SMALL COMPONENTS ============================== */
-    // Legendarios brand mark — a triangular pennant flag with a hiker silhouette inside
+    // Legendarios pennant — proportioned to match the official flag: tall white pennant on a pole,
+    // backpacked hiker with walking staff in profile, subtle wave on the trailing edge.
     function ForgeMark({ size = 40, dark = false }) {
-      const fg = dark ? "#0c0b0a" : "#f1ece1"; // pennant fill
-      const accent = "#d35a2f"; // rust orange pole/border accent
+      const pennant = dark ? "#0c0b0a" : "#f1ece1";
+      const hiker = dark ? "#f1ece1" : "#0c0b0a";
+      const pole = "#d35a2f";
       return (
-        <svg width={size} height={size} viewBox="0 0 48 48" style={{ flexShrink: 0, filter: dark ? "none" : "drop-shadow(0 2px 6px rgba(211,90,47,0.4))" }}>
-          {/* Flagpole */}
-          <rect x="9" y="6" width="2.4" height="36" fill={accent} rx="1" />
-          {/* Pennant body */}
-          <path d="M 11.4 8 L 42 14 Q 44 16 42 18 L 11.4 24 Z" fill={fg} stroke={accent} strokeWidth="0.8" strokeLinejoin="round" />
-          {/* Hiker silhouette inside pennant */}
-          <g transform="translate(17, 10)" fill={accent}>
-            {/* head */}
-            <circle cx="3" cy="2.4" r="1.4" />
-            {/* body & pack */}
-            <path d="M 1.6 4 L 4.6 4 L 5.6 7.5 L 6.5 12 L 5 12 L 4.2 8 L 3.8 12 L 2.2 12 L 1.8 8 L 1 12 L -0.3 12 L 0.6 7.5 Z" />
-            {/* walking staff */}
-            <rect x="6.6" y="3.5" width="0.6" height="9" transform="rotate(-8 6.9 8)" />
+        <svg width={size} height={size} viewBox="0 0 64 64" style={{ flexShrink: 0,
+          filter: dark ? "none" : "drop-shadow(0 2px 5px rgba(211,90,47,0.35))" }}>
+          {/* Pole */}
+          <rect x="10" y="4" width="2" height="56" fill={pole} rx="1" />
+          {/* Pole base ball */}
+          <circle cx="11" cy="3" r="1.8" fill={pole} />
+          {/* Pennant — flowing triangle with subtle wave on trailing edge */}
+          <path d="M 12 8
+                   C 28 9, 44 11, 58 14
+                   Q 60 16, 58 18
+                   C 44 22, 30 26, 12 28
+                   Z"
+                fill={pennant} />
+          {/* Hiker silhouette inside pennant - climbing pose, backpack, staff */}
+          <g fill={hiker}>
+            {/* Head */}
+            <circle cx="26" cy="13.5" r="1.6" />
+            {/* Backpack (behind torso) */}
+            <path d="M 22.5 15 L 25 15 L 25 21 L 22.5 21 Z" />
+            {/* Torso leaning forward */}
+            <path d="M 24.5 15.2 L 28 15.2 L 29 18 L 27.8 20.5 L 25 20.5 Z" />
+            {/* Front leg striding */}
+            <path d="M 27.5 20 L 29.5 20.4 L 31 24.5 L 29.6 25 L 28 22 Z" />
+            {/* Back leg pushing off */}
+            <path d="M 25 20.5 L 26.5 20.5 L 25.5 25.5 L 24 25.5 Z" />
+            {/* Walking staff angled forward */}
+            <path d="M 31 14 L 32 14.4 L 30.5 26 L 29.5 25.6 Z" />
+            {/* Forward arm holding staff */}
+            <path d="M 28 16 L 31.5 14.5 L 32 15.2 L 28.5 17 Z" />
           </g>
-          {/* Base flagpole foot */}
-          <circle cx="10.2" cy="42" r="1.6" fill={accent} />
         </svg>
       );
     }
@@ -876,7 +938,7 @@
                                 animation: "lgndpulse 1.1s infinite" }} />LIVE</span>}
                           </div>
                           <div style={{ fontSize: 10.5, color: C.dim }}>
-                            {isIron(r.perfectDays) ? "IRON Legendario" : r.rank}{r.team ? " · " + r.team : ""}
+                            {isIron(r.perfectDays) ? "IRON Legendario" : r.rank}{r.legendarioNum ? " · #" + r.legendarioNum : ""}
                           </div>
                         </div>
                         <div style={{ textAlign: "right", flexShrink: 0 }}>
@@ -907,7 +969,7 @@
                         animation: "lgndpulse 1.1s infinite", flexShrink: 0 }} />
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 14, fontWeight: 800, color: C.text }}>
-                          {l.name}{l.team ? <span style={{ color: C.dim, fontWeight: 500 }}> · {l.team}</span> : ""}
+                          {l.name}{l.legendarioNum ? <span style={{ color: C.dim, fontWeight: 500 }}> · #{l.legendarioNum}</span> : ""}
                         </div>
                         <div style={{ fontSize: 12, color: C.gold }}>{l.activity}</div>
                       </div>
@@ -953,7 +1015,7 @@
     function MeView({ profile, setProfile, stats, rank, td, days, showToast }) {
       const [editing, setEditing] = useState(false);
       const [name, setName] = useState(profile.name);
-      const [team, setTeam] = useState(profile.team || "");
+      const [legNum, setLegNum] = useState(profile.legendarioNum || "");
       const [startDate, setStartDate] = useState(profile.startDate || DEFAULT_START);
       const [shareModal, setShareModal] = useState(false);
 
@@ -971,7 +1033,7 @@
       };
 
       const saveProfile = () => {
-        setProfile(p => ({ ...p, name: name.trim() || p.name, team: team.trim(), startDate: startDate || DEFAULT_START }));
+        setProfile(p => ({ ...p, name: name.trim() || p.name, legendarioNum: legNum.trim(), startDate: startDate || DEFAULT_START }));
         setEditing(false);
       };
 
@@ -990,15 +1052,17 @@
               </div>
               {editing ? (
                 <div style={{ maxWidth: 280, margin: "0 auto" }}>
+                  <label style={{ ...lbl, textAlign: "left" }}>Name</label>
                   <input value={name} onChange={e => setName(e.target.value)}
-                    style={{ ...input, textAlign: "center", marginBottom: 8 }} />
-                  <input value={team} onChange={e => setTeam(e.target.value)} placeholder="Team / chapter"
-                    style={{ ...input, textAlign: "center", marginBottom: 8 }} />
-                  <label style={{ ...lbl, textAlign: "left", marginTop: 6 }}>Your Day 1</label>
+                    style={{ ...input, textAlign: "center", marginBottom: 10 }} />
+                  <label style={{ ...lbl, textAlign: "left" }}>Legendario #</label>
+                  <input value={legNum} onChange={e => setLegNum(e.target.value)} placeholder="e.g. 1247"
+                    inputMode="numeric" style={{ ...input, textAlign: "center", marginBottom: 10 }} />
+                  <label style={{ ...lbl, textAlign: "left" }}>Your Day 1</label>
                   <input type="date" value={startDate} max={todayIso()} onChange={e => setStartDate(e.target.value || DEFAULT_START)}
                     style={{ ...input, textAlign: "center" }} />
                   <div style={{ fontSize: 10.5, color: C.dim, marginTop: 6, lineHeight: 1.5, textAlign: "left" }}>
-                    Changing this shifts your whole 66-day window. Your check-offs stay tied to the day number, not the calendar date.
+                    Changing Day 1 shifts your whole 66-day window. Check-offs stay tied to the day number.
                   </div>
                   <button onClick={saveProfile} style={{ ...primaryBtn, marginTop: 10 }}>Save</button>
                 </div>
@@ -1009,7 +1073,7 @@
                       {I.pencil({ size: 14, color: C.dim })}
                     </button>
                   </div>
-                  {profile.team && <div style={{ fontSize: 12, color: C.dim }}>{profile.team}</div>}
+                  {profile.legendarioNum && <div style={{ fontSize: 12, color: C.gold, fontWeight: 700, letterSpacing: 0.5 }}>Legendario #{profile.legendarioNum}</div>}
                   {iron ? (
                     <div style={{ display: "inline-block", marginTop: 10, padding: "6px 16px", borderRadius: 99,
                       background: IRON.grad, color: "#1a1a1f", fontWeight: 900, fontSize: 13, letterSpacing: 1.5,
@@ -1121,47 +1185,107 @@
     }
 
     /* ============================== ONBOARDING ============================== */
-    function Onboarding({ onDone }) {
+    function Onboarding({ onSignUp, onSignIn }) {
+      const [mode, setMode] = useState("signup"); // 'signup' | 'signin'
       const [name, setName] = useState("");
-      const [team, setTeam] = useState("");
+      const [legNum, setLegNum] = useState("");
       const [start, setStart] = useState(DEFAULT_START);
+      const [busy, setBusy] = useState(false);
+      const [err, setErr] = useState("");
       const today = todayIso();
-      const submit = () => { if (name.trim()) onDone(name, team, start); };
+
+      const submit = async () => {
+        setErr("");
+        if (mode === "signin") {
+          if (!legNum.trim()) { setErr("Enter your Legendario number"); return; }
+          setBusy(true);
+          const found = await onSignIn(legNum.trim());
+          setBusy(false);
+          if (!found) setErr("No brother found with that Legendario #. Sign up if you're new.");
+          return;
+        }
+        if (!name.trim()) { setErr("Enter your name"); return; }
+        if (!legNum.trim()) { setErr("Enter your Legendario #"); return; }
+        setBusy(true);
+        const ok = await onSignUp(name.trim(), legNum.trim(), start);
+        setBusy(false);
+        if (!ok) setErr("That Legendario # is already taken. Try Sign In instead.");
+      };
+
       const startDateLabel = fmtFullDate(parseStart(start));
       const isDefault = start === DEFAULT_START;
+      const tabBtn = (active) => ({
+        flex: 1, padding: "11px 0", border: "none", cursor: "pointer",
+        background: active ? "rgba(211,90,47,0.18)" : "transparent",
+        color: active ? C.gold : C.dim,
+        borderBottom: "2px solid " + (active ? C.gold : "transparent"),
+        fontSize: 12, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase",
+      });
+
       return (
         <div style={{ minHeight: "100vh", background: C.bg, color: C.text,
           display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div style={{ width: "100%", maxWidth: 380, textAlign: "center" }}>
-            <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}><ForgeMark size={72} /></div>
-            <div style={{ fontSize: 30, fontWeight: 900, letterSpacing: 1, color: C.gold }}>LGND·60</div>
-            <div style={{ fontSize: 12, color: C.sub, letterSpacing: 1, marginTop: 6, lineHeight: 1.6 }}>
+          <div style={{ width: "100%", maxWidth: 400 }}>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}><ForgeMark size={84} /></div>
+            <div style={{ fontSize: 32, fontWeight: 900, letterSpacing: 1, color: C.gold, textAlign: "center" }}>LGND·60</div>
+            <div style={{ fontSize: 12, color: C.sub, letterSpacing: 1, marginTop: 6, lineHeight: 1.6, textAlign: "center" }}>
               60 days. Six disciplines. One brotherhood.<br />Forge yourself before the next TOP.
             </div>
-            <div style={{ margin: "26px 0 10px", textAlign: "left" }}>
-              <label style={lbl}>Your name</label>
-              <input autoFocus value={name} onChange={e => setName(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && submit()}
-                placeholder="Brother's name" style={bigInput} />
-              <label style={{ ...lbl, marginTop: 14 }}>Team / chapter <span style={{ color: C.faint }}>(optional)</span></label>
-              <input value={team} onChange={e => setTeam(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && submit()}
-                placeholder="Philly, Orlando, Camp 7…" style={bigInput} />
-              <label style={{ ...lbl, marginTop: 14 }}>Your Day 1</label>
-              <input type="date" value={start} max={today} onChange={e => setStart(e.target.value || DEFAULT_START)} style={bigInput} />
-              <div style={{ fontSize: 11, color: C.dim, marginTop: 6, lineHeight: 1.5 }}>
-                {isDefault
-                  ? <>Official start: <b style={{ color: C.gold }}>{startDateLabel}</b>. If you missed it, pick today as your Day 1.</>
-                  : <>Your Day 1 is <b style={{ color: C.gold }}>{startDateLabel}</b>. Each man runs his own 66 days.</>}
-              </div>
+
+            {/* tab toggle */}
+            <div style={{ display: "flex", marginTop: 26, borderBottom: "1px solid " + C.border }}>
+              <button onClick={() => { setMode("signup"); setErr(""); }} style={tabBtn(mode === "signup")}>New Brother</button>
+              <button onClick={() => { setMode("signin"); setErr(""); }} style={tabBtn(mode === "signin")}>Sign In</button>
             </div>
-            <button disabled={!name.trim()} onClick={submit} style={{
-              width: "100%", marginTop: 12, padding: "14px 0", borderRadius: 11, border: "none",
-              cursor: name.trim() ? "pointer" : "not-allowed",
-              background: name.trim() ? "linear-gradient(135deg,#b04a25,#d35a2f)" : "#241a0c",
-              color: name.trim() ? "#0c0b0a" : C.dim, fontWeight: 900, fontSize: 15,
+
+            <div style={{ margin: "20px 0 10px" }}>
+              {mode === "signup" ? (
+                <>
+                  <label style={lbl}>Your name</label>
+                  <input autoFocus value={name} onChange={e => setName(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && submit()}
+                    placeholder="Brother's name" style={bigInput} />
+                  <label style={{ ...lbl, marginTop: 14 }}>Your Legendario #</label>
+                  <input value={legNum} onChange={e => setLegNum(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && submit()}
+                    placeholder="e.g. 1247" style={bigInput} inputMode="numeric" />
+                  <div style={{ fontSize: 11, color: C.dim, marginTop: 6 }}>
+                    This is your unique ID. Use it to sign back in on any device.
+                  </div>
+                  <label style={{ ...lbl, marginTop: 14 }}>Your Day 1</label>
+                  <input type="date" value={start} max={today} onChange={e => setStart(e.target.value || DEFAULT_START)} style={bigInput} />
+                  <div style={{ fontSize: 11, color: C.dim, marginTop: 6, lineHeight: 1.5 }}>
+                    {isDefault
+                      ? <>Official start: <b style={{ color: C.gold }}>{startDateLabel}</b>. If you missed it, pick today.</>
+                      : <>Your Day 1 is <b style={{ color: C.gold }}>{startDateLabel}</b>.</>}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <label style={lbl}>Your Legendario #</label>
+                  <input autoFocus value={legNum} onChange={e => setLegNum(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && submit()}
+                    placeholder="Enter your number" style={bigInput} inputMode="numeric" />
+                  <div style={{ fontSize: 11, color: C.dim, marginTop: 8, lineHeight: 1.5 }}>
+                    Signed in here before? Type your Legendario # and we'll pull up your progress — streak, perfect days, journal, all of it.
+                  </div>
+                </>
+              )}
+            </div>
+
+            {err && (
+              <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 9,
+                background: "rgba(211,90,47,0.12)", border: "1px solid " + C.borderHi,
+                color: C.gold, fontSize: 12, fontWeight: 600 }}>{err}</div>
+            )}
+
+            <button disabled={busy} onClick={submit} style={{
+              width: "100%", marginTop: 14, padding: "14px 0", borderRadius: 11, border: "none",
+              cursor: busy ? "wait" : "pointer",
+              background: busy ? "#241a0c" : "linear-gradient(135deg,#b04a25,#d35a2f)",
+              color: busy ? C.dim : "#0c0b0a", fontWeight: 900, fontSize: 15,
               letterSpacing: 1, textTransform: "uppercase" }}>
-              Enter the Forge →
+              {busy ? "…" : mode === "signin" ? "Sign In →" : "Enter the Trail →"}
             </button>
           </div>
         </div>
@@ -1237,16 +1361,17 @@
         setTimeout(() => setSyncing(false), 300);
       }, []);
 
-      // Push my stats to shared leaderboard (debounced)
+      // Push my stats AND days_data to shared backend (debounced)
       useEffect(() => {
         if (!loaded || !profile) return;
         const t = setTimeout(async () => {
+          await api.upsertUser(profile, days, stats, rank.cur.name);
           const summary = {
-            userId: profile.userId, name: profile.name, team: profile.team || "",
+            userId: profile.userId, legendarioNum: profile.legendarioNum || "",
+            name: profile.name, team: profile.team || "",
             points: stats.points, streak: stats.streak, perfectDays: stats.perfectDays,
             daysLogged: stats.daysLogged, rank: rank.cur.name, lastActive: Date.now(),
           };
-          await api.upsertUser(summary);
           // refresh leaderboard locally so my row shows up immediately
           const newLb = { ...(lsGet(LS.LB) || {}), [profile.userId]: summary };
           lsSet(LS.LB, newLb);
@@ -1255,9 +1380,9 @@
             count: Object.keys(newLb).length,
             iron: Object.values(newLb).filter(v => isIron(v.perfectDays)).length,
           });
-        }, 800);
+        }, 1200);
         return () => clearTimeout(t);
-      }, [stats, profile, rank, loaded]);
+      }, [stats, profile, days, rank, loaded]);
 
       // Poll for updates every 12s + listen to cross-tab changes
       useEffect(() => {
@@ -1300,7 +1425,7 @@
 
       const goLive = async (activity) => {
         if (!profile) return;
-        const sess = { userId: profile.userId, name: profile.name, team: profile.team || "", activity, startedAt: Date.now() };
+        const sess = { userId: profile.userId, legendarioNum: profile.legendarioNum || "", name: profile.name, team: profile.team || "", activity, startedAt: Date.now() };
         setLive(sess);
         const newLive = { ...(lsGet(LS.LIVE) || {}), [profile.userId]: sess };
         lsSet(LS.LIVE, newLive);
@@ -1322,7 +1447,8 @@
       const pushFeed = async (type, content) => {
         if (!profile || !content || !content.trim()) return;
         const entry = {
-          id: newId(), userId: profile.userId, name: profile.name, team: profile.team || "",
+          id: newId(), userId: profile.userId, legendarioNum: profile.legendarioNum || "",
+          name: profile.name, team: profile.team || "",
           type, content: content.trim(), day: selectedDay, ts: Date.now(),
         };
         const newFeed = [entry, ...(lsGet(LS.FEED) || [])].slice(0, 120);
@@ -1346,12 +1472,35 @@
       }
 
       if (!profile) {
-        return <Onboarding onDone={(name, team, start) => {
-          const p = { userId: newId(), name: name.trim(), team: team.trim(), startDate: start || DEFAULT_START };
+        const handleSignUp = async (nm, num, start) => {
+          // Check if this Legendario # is already in use
+          const existing = await api.loginByLegendarioNum(num);
+          if (existing) return false; // collision — tell user to sign in instead
+          const p = { userId: newId(), legendarioNum: num, name: nm,
+            team: "", startDate: start || DEFAULT_START };
           setProfileState(p);
+          setDays({});
           setSelectedDay(todayNum(p.startDate));
           lsSet(LS.ME, { profile: p, days: {} });
-        }} />;
+          return true;
+        };
+        const handleSignIn = async (num) => {
+          const found = await api.loginByLegendarioNum(num);
+          if (!found) return false;
+          const p = found.profile;
+          const loadedDays = found.days || {};
+          setProfileState(p);
+          setDays(loadedDays);
+          setSelectedDay(todayNum(p.startDate));
+          // seed lastPerfect so we don't fire confetti for old data
+          const seen = new Set();
+          Object.entries(loadedDays).forEach(([k, v]) => { if (dayDone(v) === TASKS.length) seen.add(k); });
+          lastPerfect.current = seen;
+          lsSet(LS.ME, { profile: p, days: loadedDays });
+          showToast("✓ Welcome back, " + p.name);
+          return true;
+        };
+        return <Onboarding onSignUp={handleSignUp} onSignIn={handleSignIn} />;
       }
 
       const td = todayNum(startDate);
