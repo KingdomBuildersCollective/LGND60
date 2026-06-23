@@ -1,0 +1,1387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LGND-60 · Forge a Legend</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { background: #08080c; font-family: 'Inter', 'Helvetica Neue', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    @keyframes lgndpulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.35;transform:scale(.7)} }
+    @keyframes lgndfall { 0%{transform:translateY(-12vh) rotate(0);opacity:1} 100%{transform:translateY(110vh) rotate(720deg);opacity:0} }
+    button { font-family: inherit; }
+    input, textarea { font-family: inherit; }
+    input:focus, textarea:focus { border-color: #f5a623 !important; }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;color:#f5a623;font-family:sans-serif">
+      <div style="text-align:center">
+        <div style="width:60px;height:60px;margin:0 auto 14px;border-radius:14px;background:linear-gradient(135deg,#c97b2a,#f5a623);display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:900;color:#1a0e00">L</div>
+        <div style="letter-spacing:4px;font-size:12px;color:#6f5e3c">LOADING THE FORGE…</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.25.6/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.7/dist/umd/supabase.js"></script>
+
+  <script type="text/babel" data-presets="react">
+    const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+    /* ============================== ICONS (inline SVG) ============================== */
+    const Icon = ({ d, size = 16, color = "currentColor", fill = "none", strokeWidth = 2, style }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={strokeWidth}
+        strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, ...style }}>
+        <g dangerouslySetInnerHTML={{ __html: d }} />
+      </svg>
+    );
+    const I = {
+      sunrise: (p) => <Icon {...p} d='<path d="M17 18a5 5 0 0 0-10 0"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"/><line x1="1" y1="18" x2="3" y2="18"/><line x1="21" y1="18" x2="23" y2="18"/><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"/><line x1="23" y1="22" x2="1" y2="22"/><polyline points="8 6 12 2 16 6"/>' />,
+      book: (p) => <Icon {...p} d='<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>' />,
+      phone: (p) => <Icon {...p} d='<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>' />,
+      dumbbell: (p) => <Icon {...p} d='<path d="M14.4 14.4L9.6 9.6"/><path d="M18.657 21.485a2 2 0 1 1-2.829-2.828l-1.767 1.768a2 2 0 1 1-2.829-2.829l6.364-6.364a2 2 0 1 1 2.829 2.829l-1.768 1.767a2 2 0 1 1 2.828 2.829z"/><path d="M21.5 21.5l-1.4-1.4"/><path d="M3.9 3.9L2.5 2.5"/><path d="M6.404 12.768a2 2 0 1 1-2.829-2.829l1.768-1.767a2 2 0 1 1-2.828-2.829l2.828-2.828a2 2 0 1 1 2.829 2.828l1.767-1.768a2 2 0 1 1 2.829 2.829z"/>' />,
+      camera: (p) => <Icon {...p} d='<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>' />,
+      megaphone: (p) => <Icon {...p} d='<path d="M3 11l18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>' />,
+      flame: (p) => <Icon {...p} d='<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>' />,
+      trophy: (p) => <Icon {...p} d='<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>' />,
+      award: (p) => <Icon {...p} d='<circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/>' />,
+      chevL: (p) => <Icon {...p} d='<polyline points="15 18 9 12 15 6"/>' />,
+      chevR: (p) => <Icon {...p} d='<polyline points="9 18 15 12 9 6"/>' />,
+      check: (p) => <Icon {...p} d='<polyline points="20 6 9 17 4 12"/>' />,
+      plus: (p) => <Icon {...p} d='<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>' />,
+      pencil: (p) => <Icon {...p} d='<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>' />,
+      trash: (p) => <Icon {...p} d='<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>' />,
+      x: (p) => <Icon {...p} d='<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>' />,
+      radio: (p) => <Icon {...p} d='<circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/>' />,
+      crown: (p) => <Icon {...p} d='<path d="M2 4l3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"/>' />,
+      medal: (p) => <Icon {...p} d='<path d="M7.21 15L2.66 7.14a2 2 0 0 1 .13-2.2L4.4 2.8A2 2 0 0 1 6 2h12a2 2 0 0 1 1.6.8l1.6 2.14a2 2 0 0 1 .14 2.2L16.79 15"/><circle cx="12" cy="17" r="5"/>' />,
+      sparkles: (p) => <Icon {...p} d='<path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/><path d="M19 13l.75 2.25L22 16l-2.25.75L19 19l-.75-2.25L16 16l2.25-.75L19 13z"/>' />,
+      heart: (p) => <Icon {...p} d='<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>' />,
+      zap: (p) => <Icon {...p} d='<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>' />,
+      activity: (p) => <Icon {...p} d='<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>' />,
+      share: (p) => <Icon {...p} d='<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>' />,
+      star: (p) => <Icon {...p} d='<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>' />,
+      home: (p) => <Icon {...p} d='<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>' />,
+      users: (p) => <Icon {...p} d='<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>' />,
+      refresh: (p) => <Icon {...p} d='<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>' />,
+      copy: (p) => <Icon {...p} d='<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>' />,
+      clock: (p) => <Icon {...p} d='<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>' />,
+      lock: (p) => <Icon {...p} d='<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>' />,
+      badge: (p) => <Icon {...p} d='<path d="M9 12l2 2 4-4"/><path d="M21 12c0 5-3.5 7.5-9 9-5.5-1.5-9-4-9-9V5l9-3 9 3v7z"/>' />,
+      party: (p) => <Icon {...p} d='<path d="M5.8 11.3 2 22l10.7-3.79"/><path d="M4 3h.01"/><path d="M22 8h.01"/><path d="M15 2h.01"/><path d="M22 20h.01"/><path d="M11 13a9 9 0 0 1 8-8"/>' />,
+      quote: (p) => <Icon {...p} d='<path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/>' />,
+      target: (p) => <Icon {...p} d='<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>' />,
+    };
+
+    /* ============================== CONFIG ============================== */
+    const C = {
+      bg: "#08080c", panel: "rgba(255,255,255,0.035)", panelHi: "rgba(245,166,35,0.10)", border: "#241a0c",
+      borderHi: "rgba(245,166,35,0.35)", gold: "#f5a623", goldLt: "#ffcf73", amber: "#c97b2a",
+      text: "#f1ede4", sub: "#9c8c6c", dim: "#6f5e3c", faint: "#4a3a1a", red: "#e0563d", green: "#46cf86",
+    };
+    const IRON = { mid: "#aab0ba", hi: "#e6e9ef", grad: "linear-gradient(135deg,#7d828c,#cbd0d8 55%,#eef1f6)" };
+    const TOTAL_DAYS = 66, PERFECT_GOAL = 60;
+    const START_DATE = new Date("2026-06-22T00:00:00");
+
+    const TASKS = [
+      { id: "prayer", label: "6 AM Prayer Call", short: "Prayer", icon: I.sunrise, detail: "Join the morning call" },
+      { id: "bible", label: "Bible · 15 Min", short: "Bible", icon: I.book, detail: "Read the Word",
+        field: "verse", placeholder: "Psalm 1, John 15, Joshua 1…", feedType: "verse" },
+      { id: "call", label: "Call a Legendario", short: "Call", icon: I.phone, detail: "1 unique brother / day", isCall: true },
+      { id: "share", label: "Share Legendarios", short: "Share", icon: I.megaphone, detail: "Spread the movement",
+        field: "shareNote", placeholder: "Invited a friend, posted my story…" },
+      { id: "workout", label: "Workout · 30 Min", short: "Train", icon: I.dumbbell, detail: "Move your body",
+        field: "workoutType", placeholder: "Run 5K, push day, BJJ, lift…", feedType: "workout" },
+      { id: "post", label: "Post for Accountability", short: "Post", icon: I.camera, detail: "Proof to the brotherhood" },
+    ];
+
+    const RANKS = [
+      { min: 0, name: "Iniciado", en: "Initiate" }, { min: 600, name: "Guerrero", en: "Warrior" },
+      { min: 1500, name: "Veterano", en: "Veteran" }, { min: 2700, name: "Centurión", en: "Centurion" },
+      { min: 4000, name: "Capitán", en: "Captain" }, { min: 5200, name: "Campeón", en: "Champion" },
+      { min: 6000, name: "LEGENDARIO", en: "Legend" },
+    ];
+
+    const FUEL = [
+      "Iron sharpeneth iron. — Proverbs 27:17",
+      "I can do all things through Christ. — Philippians 4:13",
+      "Be strong and of a good courage. — Joshua 1:9",
+      "Watch ye, stand fast, quit you like men. — 1 Cor 16:13",
+      "Discipline is the bridge between goals and achievement.",
+      "Show up. Every day. No excuses.",
+      "Run with patience the race set before you. — Hebrews 12:1",
+      "The body achieves what the mind believes.",
+      "Brothers in arms. Legends in the making.",
+      "Sweat today. Shine at TOP.",
+      "He that ruleth his spirit is greater than the mighty. — Proverbs 16:32",
+      "A man is forged in the daily fire, not the single battle.",
+    ];
+
+    const BADGES = [
+      { id: "ff", name: "First Forge", icon: I.flame, desc: "First perfect day", goal: 1, get: s => s.perfectDays },
+      { id: "wk", name: "Week Warrior", icon: I.zap, desc: "7-day perfect streak", goal: 7, get: s => s.streak },
+      { id: "ir", name: "Iron Will", icon: I.award, desc: "30-day perfect streak", goal: 30, get: s => s.streak },
+      { id: "un", name: "Unbreakable", icon: I.crown, desc: "60-day perfect streak", goal: 60, get: s => s.streak },
+      { id: "rs", name: "Early Riser", icon: I.sunrise, desc: "10 prayer calls", goal: 10, get: s => s.counts.prayer },
+      { id: "sc", name: "Scholar", icon: I.book, desc: "30 Bible readings", goal: 30, get: s => s.counts.bible },
+      { id: "kp", name: "Brother's Keeper", icon: I.phone, desc: "Call 20 unique brothers", goal: 20, get: s => s.uniqueCalls },
+      { id: "hd", name: "The Herald", icon: I.megaphone, desc: "Share 15 times", goal: 15, get: s => s.counts.share },
+      { id: "bm", name: "Beast Mode", icon: I.dumbbell, desc: "30 workouts logged", goal: 30, get: s => s.counts.workout },
+      { id: "wt", name: "The Witness", icon: I.camera, desc: "30 accountability posts", goal: 30, get: s => s.counts.post },
+      { id: "tm", name: "Testimony", icon: I.heart, desc: "Log breakthrough/miracle", goal: 1, get: s => s.breakthroughs + s.miracles },
+      { id: "hl", name: "Halfway Legend", icon: I.star, desc: "30 perfect days", goal: 30, get: s => s.perfectDays },
+      { id: "fn", name: "IRON LEGENDARIO", icon: I.trophy, desc: "Finish 60 complete days", goal: 60, get: s => s.perfectDays },
+    ];
+
+    /* ============================== HELPERS ============================== */
+    const dayDate = (n) => { const d = new Date(START_DATE); d.setDate(d.getDate() + n - 1); return d; };
+    const fmtDate = (d) => d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    const todayNum = () => {
+      const t = new Date(); t.setHours(0,0,0,0);
+      const s = new Date(START_DATE); s.setHours(0,0,0,0);
+      const diff = Math.floor((t - s) / 86400000) + 1;
+      return Math.min(Math.max(diff, 1), TOTAL_DAYS);
+    };
+    const newId = () => "u_" + Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
+    const isIron = (p) => p >= 60;
+    const dayDone = (day) => { if (!day) return 0; let n = 0; for (const t of TASKS) if (day.tasks && day.tasks[t.id]) n++; return n; };
+    const copyText = async (text) => { try { await navigator.clipboard.writeText(text); return true; } catch { return false; } };
+    const openWA = (text) => { try { window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener"); } catch {} };
+    const minsAgo = (ts) => {
+      const m = Math.floor((Date.now() - ts) / 60000);
+      if (m < 1) return "just now"; if (m < 60) return m + "m ago";
+      const h = Math.floor(m / 60); if (h < 24) return h + "h ago";
+      return Math.floor(h / 24) + "d ago";
+    };
+
+    function computeStats(days) {
+      let points = 0, perfectDays = 0, daysLogged = 0;
+      const counts = { prayer: 0, bible: 0, call: 0, share: 0, workout: 0, post: 0 };
+      const callNames = new Set();
+      let breakthroughs = 0, miracles = 0;
+      for (let i = 1; i <= TOTAL_DAYS; i++) {
+        const d = days[i]; if (!d) continue;
+        const done = dayDone(d);
+        if (done > 0 || d.journal || d.breakthrough || d.miracle) daysLogged++;
+        points += done * 10;
+        if (done === TASKS.length) { perfectDays++; points += 40; }
+        for (const t of TASKS) if (d.tasks && d.tasks[t.id]) counts[t.id]++;
+        (d.calls || []).forEach(c => { if (c.done && c.name) callNames.add(c.name.trim().toLowerCase()); });
+        if (d.breakthrough) breakthroughs++;
+        if (d.miracle) miracles++;
+      }
+      let streak = 0;
+      const td = todayNum();
+      for (let i = td; i >= 1; i--) {
+        if (dayDone(days[i]) === TASKS.length) streak++; else break;
+      }
+      return { points, perfectDays, daysLogged, counts, uniqueCalls: callNames.size, breakthroughs, miracles, streak };
+    }
+
+    function rankFor(points) {
+      let idx = 0;
+      for (let i = 0; i < RANKS.length; i++) if (points >= RANKS[i].min) idx = i;
+      const cur = RANKS[idx]; const next = RANKS[idx + 1] || null;
+      return { cur, next, pct: next ? Math.min(100, Math.round(((points - cur.min) / (next.min - cur.min)) * 100)) : 100 };
+    }
+
+    /* ============================== STORAGE (Supabase + localStorage fallback) ============================== */
+    // Configure your Supabase project here:
+    const SUPABASE_URL = "https://kgfygrpriqyweoergzrj.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtnZnlncnByaXF5d2VvZXJnenJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxNjc0MjUsImV4cCI6MjA5Nzc0MzQyNX0.gEaE2Ow7Cn-DJl8fZYiUb0DXlyoGLC4zwUNsHwk7TOs";
+
+    const LS = {
+      ME: "lgnd60_me",
+      LB: "lgnd60_lb_cache",
+      LIVE: "lgnd60_live_cache",
+      FEED: "lgnd60_feed_cache",
+    };
+    const lsGet = (k) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } };
+    const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+
+    const supabaseConfigured = SUPABASE_URL && SUPABASE_URL.startsWith("https://") && SUPABASE_KEY && SUPABASE_KEY.length > 20;
+    let sb = null;
+    if (supabaseConfigured && window.supabase && window.supabase.createClient) {
+      try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); }
+      catch (e) { console.warn("Supabase init failed:", e); sb = null; }
+    }
+    const sbReady = () => !!sb;
+
+    /* Schema (run in Supabase SQL editor):
+       create table lgnd60_users (
+         user_id text primary key,
+         name text not null,
+         team text default '',
+         points int default 0,
+         streak int default 0,
+         perfect_days int default 0,
+         days_logged int default 0,
+         rank text default 'Iniciado',
+         last_active bigint default 0,
+         updated_at timestamp with time zone default now()
+       );
+       create table lgnd60_live (
+         user_id text primary key,
+         name text not null,
+         team text default '',
+         activity text not null,
+         started_at bigint not null,
+         updated_at timestamp with time zone default now()
+       );
+       create table lgnd60_feed (
+         id text primary key,
+         user_id text not null,
+         name text not null,
+         team text default '',
+         type text not null,
+         content text not null,
+         day int not null,
+         ts bigint not null,
+         created_at timestamp with time zone default now()
+       );
+       alter table lgnd60_users enable row level security;
+       alter table lgnd60_live enable row level security;
+       alter table lgnd60_feed enable row level security;
+       create policy "anon all users" on lgnd60_users for all using (true) with check (true);
+       create policy "anon all live"  on lgnd60_live  for all using (true) with check (true);
+       create policy "anon all feed"  on lgnd60_feed  for all using (true) with check (true);
+    */
+
+    const api = {
+      async upsertUser(summary) {
+        lsSet(LS.ME + "_summary", summary);
+        if (!sbReady()) return false;
+        try {
+          const { error } = await sb.from("lgnd60_users").upsert({
+            user_id: summary.userId, name: summary.name, team: summary.team || "",
+            points: summary.points, streak: summary.streak, perfect_days: summary.perfectDays,
+            days_logged: summary.daysLogged, rank: summary.rank, last_active: summary.lastActive,
+          }, { onConflict: "user_id" });
+          if (error) { console.warn("upsertUser:", error.message); return false; }
+          return true;
+        } catch (e) { console.warn("upsertUser failed:", e); return false; }
+      },
+      async fetchLeaderboard() {
+        if (!sbReady()) return lsGet(LS.LB) || {};
+        try {
+          const { data, error } = await sb.from("lgnd60_users").select("*")
+            .order("perfect_days", { ascending: false }).order("streak", { ascending: false }).order("points", { ascending: false });
+          if (error) { console.warn("fetchLeaderboard error:", error.message || error.code || JSON.stringify(error)); return lsGet(LS.LB) || {}; }
+          const map = {};
+          (data || []).forEach(r => {
+            map[r.user_id] = {
+              userId: r.user_id, name: r.name, team: r.team || "",
+              points: r.points || 0, streak: r.streak || 0, perfectDays: r.perfect_days || 0,
+              daysLogged: r.days_logged || 0, rank: r.rank || "Iniciado", lastActive: Number(r.last_active) || 0,
+            };
+          });
+          lsSet(LS.LB, map);
+          return map;
+        } catch (e) { console.warn("fetchLeaderboard failed:", e?.message || String(e)); return lsGet(LS.LB) || {}; }
+      },
+      async setLive(sess) {
+        if (!sbReady()) return false;
+        try {
+          const { error } = await sb.from("lgnd60_live").upsert({
+            user_id: sess.userId, name: sess.name, team: sess.team || "",
+            activity: sess.activity, started_at: sess.startedAt,
+          }, { onConflict: "user_id" });
+          return !error;
+        } catch (e) { return false; }
+      },
+      async endLive(userId) {
+        if (!sbReady()) return false;
+        try { await sb.from("lgnd60_live").delete().eq("user_id", userId); return true; }
+        catch (e) { return false; }
+      },
+      async fetchLive() {
+        if (!sbReady()) return lsGet(LS.LIVE) || {};
+        try {
+          const cutoff = Date.now() - 90 * 60 * 1000;
+          const { data, error } = await sb.from("lgnd60_live").select("*").gte("started_at", cutoff);
+          if (error) return lsGet(LS.LIVE) || {};
+          const map = {};
+          (data || []).forEach(r => {
+            map[r.user_id] = { userId: r.user_id, name: r.name, team: r.team || "", activity: r.activity, startedAt: Number(r.started_at) };
+          });
+          lsSet(LS.LIVE, map);
+          return map;
+        } catch { return lsGet(LS.LIVE) || {}; }
+      },
+      async pushFeed(entry) {
+        if (!sbReady()) {
+          const list = [entry, ...(lsGet(LS.FEED) || [])].slice(0, 120);
+          lsSet(LS.FEED, list);
+          return list;
+        }
+        try {
+          const { error } = await sb.from("lgnd60_feed").insert({
+            id: entry.id, user_id: entry.userId, name: entry.name, team: entry.team || "",
+            type: entry.type, content: entry.content, day: entry.day, ts: entry.ts,
+          });
+          if (error) console.warn("pushFeed:", error.message);
+          return await api.fetchFeed();
+        } catch (e) { return lsGet(LS.FEED) || []; }
+      },
+      async fetchFeed() {
+        if (!sbReady()) return lsGet(LS.FEED) || [];
+        try {
+          const { data, error } = await sb.from("lgnd60_feed").select("*").order("ts", { ascending: false }).limit(120);
+          if (error) return lsGet(LS.FEED) || [];
+          const list = (data || []).map(r => ({
+            id: r.id, userId: r.user_id, name: r.name, team: r.team || "",
+            type: r.type, content: r.content, day: r.day, ts: Number(r.ts),
+          }));
+          lsSet(LS.FEED, list);
+          return list;
+        } catch { return lsGet(LS.FEED) || []; }
+      },
+    };
+
+    /* ============================== STYLES ============================== */
+    const card = { background: C.panel, border: "1px solid " + C.border, borderRadius: 14 };
+    const navBtn = { background: C.panel, border: "1px solid " + C.border, borderRadius: 10, width: 38, height: 38,
+      cursor: "pointer", color: C.gold, display: "flex", alignItems: "center", justifyContent: "center" };
+    const checkLg = { width: 36, height: 36, borderRadius: 9, border: "2px solid", cursor: "pointer", flexShrink: 0,
+      display: "flex", alignItems: "center", justifyContent: "center", transition: "all .15s" };
+    const checkSm = { width: 22, height: 22, borderRadius: 6, border: "2px solid", cursor: "pointer", flexShrink: 0,
+      display: "flex", alignItems: "center", justifyContent: "center" };
+    const iconBtn = { background: "none", border: "none", cursor: "pointer", padding: 4, display: "inline-flex" };
+    const input = { width: "100%", boxSizing: "border-box", background: "#131110", border: "1px solid " + C.faint,
+      borderRadius: 9, padding: "10px 11px", color: C.text, fontSize: 13.5, outline: "none" };
+    const bigInput = { ...input, padding: "13px 13px", fontSize: 15, borderRadius: 11, marginTop: 6 };
+    const primaryBtn = { width: "100%", background: "linear-gradient(135deg,#c97b2a,#f5a623)", color: "#1a0e00",
+      border: "none", borderRadius: 9, padding: "12px 0", fontSize: 13, fontWeight: 800, cursor: "pointer",
+      letterSpacing: 0.5, textTransform: "uppercase", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 };
+    const waBtn = { ...primaryBtn, background: "#1f8a52", color: "#fff" };
+    const ghostChip = { display: "inline-flex", alignItems: "center", gap: 5, background: C.panel,
+      border: "1px solid " + C.border, borderRadius: 8, padding: "7px 11px", fontSize: 11.5, fontWeight: 700,
+      color: C.gold, cursor: "pointer" };
+    const lbl = { display: "block", fontSize: 10.5, color: C.sub, textTransform: "uppercase", letterSpacing: 1, fontWeight: 700, marginBottom: 4 };
+
+    /* ============================== SMALL COMPONENTS ============================== */
+    function ForgeMark({ size = 40 }) {
+      return (
+        <div style={{ width: size, height: size, borderRadius: size * 0.24, flexShrink: 0,
+          background: "linear-gradient(135deg,#c97b2a,#f5a623 55%,#ffcf73)", display: "flex",
+          alignItems: "center", justifyContent: "center",
+          boxShadow: "0 4px 16px rgba(245,166,35,0.3), inset 0 1px 0 rgba(255,255,255,0.4)" }}>
+          <span style={{ fontSize: size * 0.5, fontWeight: 900, color: "#1a0e00", letterSpacing: -1 }}>L</span>
+        </div>
+      );
+    }
+
+    function Ring({ pct, size = 132, stroke = 11, children }) {
+      const r = (size - stroke) / 2;
+      const c = 2 * Math.PI * r;
+      const off = c * (1 - pct / 100);
+      const gid = "rg" + Math.random().toString(36).slice(2, 6);
+      return (
+        <div style={{ position: "relative", width: size, height: size }}>
+          <svg width={size} height={size}>
+            <defs>
+              <linearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#c97b2a" /><stop offset="100%" stopColor="#ffcf73" />
+              </linearGradient>
+            </defs>
+            <circle cx={size/2} cy={size/2} r={r} stroke="#1a1510" strokeWidth={stroke} fill="none" />
+            <circle cx={size/2} cy={size/2} r={r} stroke={"url(#" + gid + ")"} strokeWidth={stroke} fill="none"
+              strokeLinecap="round" strokeDasharray={c} strokeDashoffset={off}
+              transform={"rotate(-90 " + (size/2) + " " + (size/2) + ")"}
+              style={{ transition: "stroke-dashoffset 0.7s cubic-bezier(.4,0,.2,1)" }} />
+          </svg>
+          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center" }}>{children}</div>
+        </div>
+      );
+    }
+
+    function Confetti({ fire }) {
+      const [pieces, setPieces] = useState([]);
+      useEffect(() => {
+        if (!fire) return;
+        const cols = ["#f5a623", "#ffcf73", "#c97b2a", "#f1ede4", "#46cf86"];
+        const arr = Array.from({ length: 60 }, (_, i) => ({
+          id: i + "_" + fire, left: Math.random() * 100, delay: Math.random() * 0.25,
+          dur: 1.6 + Math.random() * 1.4, size: 6 + Math.random() * 8,
+          col: cols[Math.floor(Math.random() * cols.length)], rot: Math.random() * 360,
+        }));
+        setPieces(arr);
+        const t = setTimeout(() => setPieces([]), 3200);
+        return () => clearTimeout(t);
+      }, [fire]);
+      if (!pieces.length) return null;
+      return (
+        <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 9999, overflow: "hidden" }}>
+          {pieces.map(p => (
+            <div key={p.id} style={{ position: "absolute", top: 0, left: p.left + "%",
+              width: p.size, height: p.size * 0.5, background: p.col, borderRadius: 1,
+              transform: "rotate(" + p.rot + "deg)",
+              animation: "lgndfall " + p.dur + "s " + p.delay + "s ease-in forwards" }} />
+          ))}
+        </div>
+      );
+    }
+
+    function Chip({ icon, label, hot }) {
+      return (
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 10px", borderRadius: 99,
+          background: hot ? C.panelHi : C.panel, border: "1px solid " + (hot ? C.borderHi : C.border),
+          fontSize: 11.5, fontWeight: 700, color: hot ? C.gold : C.sub }}>
+          {icon({ size: 13, color: hot ? C.gold : C.amber })}{label}
+        </div>
+      );
+    }
+
+    function SectionTitle({ icon, text }) {
+      return (
+        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 12 }}>
+          {icon({ size: 15, color: C.gold })}
+          <span style={{ fontSize: 12, fontWeight: 800, color: C.gold, textTransform: "uppercase", letterSpacing: 1 }}>{text}</span>
+        </div>
+      );
+    }
+
+    function Empty({ msg }) {
+      return <div style={{ textAlign: "center", padding: "22px 14px", color: C.dim, fontSize: 12.5, lineHeight: 1.5 }}>{msg}</div>;
+    }
+
+    /* ============================== TASK ROW ============================== */
+    function TaskRow({ t, done, value, onToggle, onField, onShare }) {
+      const [open, setOpen] = useState(false);
+      return (
+        <div style={{ ...card, padding: 0, overflow: "hidden",
+          borderColor: done ? C.borderHi : C.border, background: done ? C.panelHi : C.panel,
+          transition: "background .15s, border-color .15s" }}>
+          <div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 13,
+            padding: "14px 13px", cursor: "pointer", userSelect: "none" }}>
+            <div style={{ ...checkLg, background: done ? C.gold : "#161109",
+              borderColor: done ? C.gold : C.faint,
+              boxShadow: done ? "0 0 12px rgba(245,166,35,0.35)" : "none" }}>
+              {done ? I.check({ size: 20, color: "#1a0e00", strokeWidth: 3.5 }) : t.icon({ size: 18, color: C.amber })}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 700, color: done ? C.gold : C.text }}>{t.label}</div>
+              <div style={{ fontSize: 11, color: C.dim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {value ? '"' + value + '"' : t.detail}
+              </div>
+            </div>
+            {t.field && (
+              <button onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }} style={{ ...iconBtn, padding: 6 }}>
+                {I.pencil({ size: 15, color: open || value ? C.gold : C.sub })}
+              </button>
+            )}
+            <div style={{ width: 22, textAlign: "center", flexShrink: 0 }}>
+              {done ? I.badge({ size: 20, color: C.gold }) :
+                <span style={{ width: 18, height: 18, display: "inline-block", borderRadius: 6,
+                  border: "1.5px dashed " + C.faint }} />}
+            </div>
+          </div>
+          {t.field && open && (
+            <div onClick={(e) => e.stopPropagation()} style={{ padding: "0 13px 13px", display: "flex", gap: 7 }}>
+              <input value={value} onChange={e => onField(e.target.value)} placeholder={t.placeholder} style={input} autoFocus />
+              {onShare && value.trim() && (
+                <button onClick={onShare} style={{ ...primaryBtn, width: "auto", padding: "0 14px", whiteSpace: "nowrap" }}>
+                  {I.share({ size: 13 })} Share
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function CallRow({ t, done, count, onToggle }) {
+      return (
+        <div onClick={onToggle} style={{ ...card, padding: "14px 13px",
+          borderColor: done ? C.borderHi : C.border, background: done ? C.panelHi : C.panel,
+          display: "flex", alignItems: "center", gap: 13, cursor: "pointer", userSelect: "none",
+          transition: "background .15s, border-color .15s" }}>
+          <div style={{ ...checkLg, background: done ? C.gold : "#161109",
+            borderColor: done ? C.gold : C.faint,
+            boxShadow: done ? "0 0 12px rgba(245,166,35,0.35)" : "none" }}>
+            {done ? I.check({ size: 20, color: "#1a0e00", strokeWidth: 3.5 }) : t.icon({ size: 18, color: C.amber })}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14.5, fontWeight: 700, color: done ? C.gold : C.text }}>{t.label}</div>
+            <div style={{ fontSize: 11, color: C.dim }}>
+              Tap to check · log who below{count > 0 ? " · " + count + " logged" : ""}
+            </div>
+          </div>
+          <div style={{ width: 22, textAlign: "center", flexShrink: 0 }}>
+            {done ? I.badge({ size: 20, color: C.gold }) :
+              <span style={{ width: 18, height: 18, display: "inline-block", borderRadius: 6,
+                border: "1.5px dashed " + C.faint }} />}
+          </div>
+        </div>
+      );
+    }
+
+    /* ============================== TODAY VIEW ============================== */
+    function TodayView({ stats, td, daysLeft, profile, community, selectedDay, setSelectedDay,
+      dayObj, setDay, toggleTask, pushFeed, showToast }) {
+      const done = dayDone(dayObj);
+      const pct = Math.round((done / TASKS.length) * 100);
+      const fuel = FUEL[(selectedDay - 1) % FUEL.length];
+      const isFuture = selectedDay > td;
+      const isGrace = selectedDay > PERFECT_GOAL;
+      const iron = isIron(stats.perfectDays);
+
+      const checkinText =
+        "🔥 LGND-60 · Day " + selectedDay + "/" + TOTAL_DAYS + " · " + (profile.name || "") + "\n" +
+        TASKS.map(t => (dayObj.tasks && dayObj.tasks[t.id] ? "✅" : "⬜") + " " + t.short).join("  ") + "\n" +
+        done + "/6 today · 🔥 " + stats.streak + " streak · 🏆 " + stats.perfectDays + " perfect" +
+        (iron ? " · ⚒️ IRON" : "") + "\n#LGND60 #Legendarios";
+
+      const doCopy = async () => {
+        const ok = await copyText(checkinText);
+        showToast(ok ? "✓ Check-in copied for WhatsApp" : "Use the WhatsApp button →");
+      };
+
+      const [callName, setCallName] = useState("");
+      const [callNum, setCallNum] = useState("");
+      const [editIdx, setEditIdx] = useState(null);
+      const calls = dayObj.calls || [];
+
+      const logCall = () => {
+        if (!callName.trim()) return;
+        setDay(cur => {
+          const list = [...(cur.calls || [])];
+          if (editIdx !== null) list[editIdx] = { name: callName.trim(), number: callNum.trim(), done: list[editIdx] ? list[editIdx].done : true };
+          else list.push({ name: callName.trim(), number: callNum.trim(), done: true });
+          return { calls: list, tasks: { ...(cur.tasks || {}), call: list.some(c => c.done) } };
+        });
+        setCallName(""); setCallNum(""); setEditIdx(null);
+      };
+      const toggleCall = (i) => setDay(cur => {
+        const list = [...(cur.calls || [])]; list[i] = { ...list[i], done: !list[i].done };
+        return { calls: list, tasks: { ...(cur.tasks || {}), call: list.some(c => c.done) } };
+      });
+      const removeCall = (i) => setDay(cur => {
+        const list = (cur.calls || []).filter((_, x) => x !== i);
+        return { calls: list, tasks: { ...(cur.tasks || {}), call: list.some(c => c.done) } };
+      });
+
+      return (
+        <>
+          {/* Hero */}
+          <section style={{ ...card, padding: "20px 16px", textAlign: "center", position: "relative", overflow: "hidden" }}>
+            <div style={{ position: "absolute", inset: 0, background: "radial-gradient(120% 80% at 50% -10%, rgba(245,166,35,0.10), transparent 60%)", pointerEvents: "none" }} />
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, position: "relative" }}>
+              <button onClick={() => setSelectedDay(d => Math.max(1, d - 1))} style={navBtn}>{I.chevL({ size: 20 })}</button>
+              <div>
+                <div style={{ fontSize: 12, letterSpacing: 2, color: C.gold, fontWeight: 800, textTransform: "uppercase" }}>
+                  Day {selectedDay}<span style={{ color: C.dim }}> / {TOTAL_DAYS}</span>
+                </div>
+                <div style={{ fontSize: 11, color: C.sub }}>
+                  {fmtDate(dayDate(selectedDay))}{isGrace ? " · grace day" : ""}
+                </div>
+              </div>
+              <button onClick={() => setSelectedDay(d => Math.min(TOTAL_DAYS, d + 1))} style={navBtn}>{I.chevR({ size: 20 })}</button>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "center", margin: "6px 0 4px", position: "relative" }}>
+              <Ring pct={pct}>
+                <div style={{ fontSize: 36, fontWeight: 900, color: pct === 100 ? C.gold : C.text, lineHeight: 1 }}>
+                  {done}<span style={{ fontSize: 18, color: C.dim }}>/{TASKS.length}</span>
+                </div>
+                <div style={{ fontSize: 10, letterSpacing: 1.5, color: C.dim, textTransform: "uppercase", marginTop: 3 }}>
+                  {pct === 100 ? "Forged 🔥" : "Disciplines"}
+                </div>
+              </Ring>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 8, position: "relative", flexWrap: "wrap" }}>
+              <Chip icon={I.flame} label={stats.streak + " streak"} hot />
+              <Chip icon={I.trophy} label={stats.perfectDays + " perfect"} />
+              <Chip icon={I.users} label={(community.count || 1) + " in it"} />
+              <Chip icon={I.clock} label={daysLeft + "d to TOP"} />
+            </div>
+          </section>
+
+          {/* Fuel */}
+          <div style={{ ...card, padding: "11px 14px", marginTop: 12, display: "flex", gap: 10, alignItems: "flex-start" }}>
+            {I.quote({ size: 16, color: C.amber, style: { marginTop: 2 } })}
+            <div style={{ fontSize: 13, color: C.text, fontStyle: "italic", lineHeight: 1.4 }}>{fuel}</div>
+          </div>
+
+          {isFuture && (
+            <div style={{ ...card, marginTop: 12, padding: "10px 14px", color: C.sub, fontSize: 12, textAlign: "center" }}>
+              This day hasn't arrived yet — pre-load your plan.
+            </div>
+          )}
+
+          {/* Tasks */}
+          <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+            {TASKS.map(t => t.isCall
+              ? <CallRow key={t.id} t={t} done={!!(dayObj.tasks && dayObj.tasks.call)}
+                  count={calls.filter(c => c.done).length}
+                  onToggle={() => setDay(cur => ({ tasks: { ...(cur.tasks || {}), call: !(cur.tasks && cur.tasks.call) } }))} />
+              : <TaskRow key={t.id} t={t} done={!!(dayObj.tasks && dayObj.tasks[t.id])}
+                  value={dayObj[t.field] || ""} onToggle={() => toggleTask(t.id)}
+                  onField={(v) => setDay({ [t.field]: v })}
+                  onShare={t.feedType ? () => pushFeed(t.feedType, dayObj[t.field]) : null} />
+            )}
+          </div>
+
+          {/* Check-in share */}
+          <section style={{ ...card, marginTop: 14, padding: 14,
+            background: pct === 100 ? C.panelHi : C.panel,
+            borderColor: pct === 100 ? C.borderHi : C.border }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              {I.share({ size: 15, color: C.gold })}
+              <span style={{ fontSize: 12, fontWeight: 800, color: C.gold, textTransform: "uppercase", letterSpacing: 1 }}>
+                Post today's check-in
+              </span>
+              <span style={{ marginLeft: "auto", fontSize: 12, fontWeight: 800, color: pct === 100 ? C.gold : C.sub }}>{done}/6</span>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={doCopy} style={{ ...primaryBtn, flex: 1 }}>
+                {I.copy({ size: 14 })} Copy
+              </button>
+              <button onClick={() => openWA(checkinText)} style={{ ...waBtn, flex: 1 }}>
+                WhatsApp
+              </button>
+            </div>
+          </section>
+
+          {/* Call log */}
+          <section style={{ ...card, marginTop: 14, padding: 15 }}>
+            <SectionTitle icon={I.phone} text="Legendario Call Log" />
+            {calls.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 11 }}>
+                {calls.map((c, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 10px",
+                    borderRadius: 9, background: c.done ? C.panelHi : C.panel,
+                    border: "1px solid " + (c.done ? C.borderHi : C.border) }}>
+                    <button onClick={() => toggleCall(i)} style={{ ...checkSm,
+                      background: c.done ? C.gold : "transparent",
+                      borderColor: c.done ? C.gold : C.faint }}>
+                      {c.done && I.check({ size: 13, color: "#1a0e00", strokeWidth: 3 })}
+                    </button>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 700, color: c.done ? C.gold : C.text }}>{c.name}</span>
+                      {c.number && <span style={{ fontSize: 11, color: C.dim, marginLeft: 8 }}>{c.number}</span>}
+                    </div>
+                    <button onClick={() => { setCallName(c.name); setCallNum(c.number); setEditIdx(i); }} style={iconBtn}>
+                      {I.pencil({ size: 13, color: C.sub })}
+                    </button>
+                    <button onClick={() => removeCall(i)} style={iconBtn}>
+                      {I.trash({ size: 13, color: C.red })}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 6 }}>
+              <input value={callName} onChange={e => setCallName(e.target.value)} placeholder="Brother's name"
+                onKeyDown={e => e.key === "Enter" && logCall()} style={input} />
+              <input value={callNum} onChange={e => setCallNum(e.target.value)} placeholder="Phone"
+                onKeyDown={e => e.key === "Enter" && logCall()} style={{ ...input, width: 90 }} />
+            </div>
+            <button onClick={logCall} style={{ ...primaryBtn, marginTop: 8 }}>
+              {editIdx !== null ? "Update call" : <>{I.plus({ size: 15 })} Log call</>}
+            </button>
+          </section>
+
+          {/* Metrics */}
+          <section style={{ ...card, marginTop: 14, padding: 15 }}>
+            <SectionTitle icon={I.activity} text="Daily Metrics" />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div>
+                <label style={lbl}>Weight (lb)</label>
+                <input type="number" value={dayObj.weight || ""} onChange={e => setDay({ weight: e.target.value })}
+                  placeholder="—" style={input} />
+              </div>
+              <div>
+                <label style={lbl}>Energy</label>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {["😣", "😐", "🙂", "💪", "🔥"].map((em, i) => (
+                    <button key={i} onClick={() => setDay({ energy: i + 1 })} style={{
+                      flex: 1, padding: "7px 0", borderRadius: 8, cursor: "pointer", fontSize: 16,
+                      background: dayObj.energy === i + 1 ? C.panelHi : C.panel,
+                      border: "1px solid " + (dayObj.energy === i + 1 ? C.borderHi : C.border) }}>{em}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <label style={lbl}>Aches / pains</label>
+              <input value={dayObj.aches || ""} onChange={e => setDay({ aches: e.target.value })}
+                placeholder="Knees, lower back, none…" style={input} />
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <label style={lbl}>Daily journal</label>
+              <textarea value={dayObj.journal || ""} onChange={e => setDay({ journal: e.target.value })}
+                placeholder="What did today demand of you? What did you overcome?" rows={3}
+                style={{ ...input, resize: "vertical", lineHeight: 1.5 }} />
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <label style={lbl}>💡 Breakthrough / revelation</label>
+              <textarea value={dayObj.breakthrough || ""} onChange={e => setDay({ breakthrough: e.target.value })}
+                rows={2} placeholder="What shifted?" style={{ ...input, resize: "vertical", lineHeight: 1.5 }} />
+              {(dayObj.breakthrough || "").trim() && (
+                <button onClick={() => pushFeed("breakthrough", dayObj.breakthrough)} style={{ ...ghostChip, marginTop: 6 }}>
+                  {I.share({ size: 12 })} Share testimony with brothers
+                </button>
+              )}
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <label style={lbl}>✨ Healing / miracle</label>
+              <textarea value={dayObj.miracle || ""} onChange={e => setDay({ miracle: e.target.value })}
+                rows={2} placeholder="What did God do?" style={{ ...input, resize: "vertical", lineHeight: 1.5 }} />
+              {(dayObj.miracle || "").trim() && (
+                <button onClick={() => pushFeed("miracle", dayObj.miracle)} style={{ ...ghostChip, marginTop: 6 }}>
+                  {I.share({ size: 12 })} Share with brothers
+                </button>
+              )}
+            </div>
+          </section>
+
+          <a href="https://chat.whatsapp.com/IPkjhZR4Rgt8KbJ5AML4vV?mode=gi_t" target="_blank" rel="noopener"
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              marginTop: 12, padding: "12px 14px", borderRadius: 10,
+              border: "1px solid rgba(31,138,82,0.4)", background: "rgba(31,138,82,0.10)",
+              color: "#46cf86", fontSize: 13, fontWeight: 800, textDecoration: "none",
+              letterSpacing: 0.4, textTransform: "uppercase" }}>
+            {I.users({ size: 16, color: "#46cf86" })} Join the LGND-60 WhatsApp Group
+          </a>
+        </>
+      );
+    }
+
+    /* ============================== BROTHERS VIEW ============================== */
+    function BrothersView({ profile, community, lb, liveMap, feed, refresh, loading }) {
+      const [sub, setSub] = useState("rank");
+      const rows = Object.values(lb).sort((a, b) =>
+        (b.perfectDays - a.perfectDays) || (b.streak - a.streak) || (b.points - a.points));
+      const now = Date.now();
+      const liveNow = Object.values(liveMap).filter(l => now - l.startedAt < 90 * 60000);
+
+      return (
+        <>
+          <div style={{ ...card, padding: "14px 16px", marginBottom: 12, display: "flex", alignItems: "center", gap: 14,
+            background: "radial-gradient(120% 100% at 0% 0%, rgba(245,166,35,0.12), transparent 60%)",
+            borderColor: C.borderHi }}>
+            {I.users({ size: 26, color: C.gold })}
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 24, fontWeight: 900, color: C.gold, lineHeight: 1 }}>
+                {rows.length || community.count || 1} <span style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>brothers forging</span>
+              </div>
+              <div style={{ fontSize: 11, color: C.dim, marginTop: 3 }}>
+                {liveNow.length} live now · {rows.filter(r => isIron(r.perfectDays)).length} IRON Legendarios
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+            {[
+              { id: "rank", l: "Leaderboard", icon: I.trophy },
+              { id: "live", l: "Live" + (liveNow.length ? " " + liveNow.length : ""), icon: I.radio },
+              { id: "feed", l: "Feed", icon: I.activity },
+            ].map(s => {
+              const on = sub === s.id;
+              return (
+                <button key={s.id} onClick={() => setSub(s.id)} style={{
+                  flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+                  padding: "9px 0", borderRadius: 9, cursor: "pointer", fontSize: 11.5, fontWeight: 800,
+                  background: on ? "linear-gradient(135deg,#c97b2a,#f5a623)" : C.panel,
+                  color: on ? "#1a0e00" : C.sub,
+                  border: "1px solid " + (on ? C.borderHi : C.border) }}>
+                  {s.icon({ size: 14 })}{s.l}
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+            <button onClick={refresh} style={{ ...ghostChip, opacity: loading ? 0.5 : 1 }}>
+              {I.refresh({ size: 12 })} {loading ? "Syncing…" : "Refresh"}
+            </button>
+          </div>
+
+          {sub === "rank" && (
+            rows.length === 0
+              ? <Empty msg="No brothers on the board yet. Complete a discipline and you'll appear. Share the same link so the whole camp syncs." />
+              : <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                  {rows.map((r, i) => {
+                    const me = r.userId === profile.userId;
+                    const onLive = liveNow.some(l => l.userId === r.userId);
+                    const medal = i === 0 ? "#f5a623" : i === 1 ? "#c9c9c9" : i === 2 ? "#c97b2a" : null;
+                    return (
+                      <div key={r.userId} style={{ ...card, padding: "11px 13px", display: "flex",
+                        alignItems: "center", gap: 12,
+                        borderColor: me ? C.borderHi : C.border, background: me ? C.panelHi : C.panel }}>
+                        <div style={{ width: 30, textAlign: "center", flexShrink: 0 }}>
+                          {medal ? I.medal({ size: 22, color: medal }) :
+                            <span style={{ fontSize: 14, fontWeight: 800, color: C.dim }}>{i + 1}</span>}
+                        </div>
+                        <div style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+                          background: "linear-gradient(135deg,#2a1d0c,#3a2810)",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 15, fontWeight: 900, color: C.gold, border: "1px solid " + C.border }}>
+                          {(r.name || "?")[0].toUpperCase()}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 800, color: me ? C.gold : C.text,
+                            display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                            {r.name}
+                            {me && <span style={{ fontSize: 9, color: C.amber, border: "1px solid " + C.border,
+                              padding: "1px 5px", borderRadius: 5 }}>YOU</span>}
+                            {isIron(r.perfectDays) && <span style={{ fontSize: 9, fontWeight: 900,
+                              color: "#1a1a1f", background: IRON.grad, padding: "1px 6px", borderRadius: 5 }}>⚒️ IRON</span>}
+                            {onLive && <span style={{ display: "inline-flex", alignItems: "center", gap: 3,
+                              fontSize: 9, color: C.red }}>
+                              <span style={{ width: 6, height: 6, borderRadius: 99, background: C.red,
+                                animation: "lgndpulse 1.1s infinite" }} />LIVE</span>}
+                          </div>
+                          <div style={{ fontSize: 10.5, color: C.dim }}>
+                            {isIron(r.perfectDays) ? "IRON Legendario" : r.rank}{r.team ? " · " + r.team : ""}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: "right", flexShrink: 0 }}>
+                          <div style={{ fontSize: 16, fontWeight: 900, color: C.gold }}>{r.perfectDays}</div>
+                          <div style={{ fontSize: 9, color: C.dim, letterSpacing: 0.5 }}>PERFECT</div>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, minWidth: 30 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 2, color: C.amber, fontWeight: 800, fontSize: 13 }}>
+                            {I.flame({ size: 12, color: C.amber, fill: r.streak > 0 ? C.amber : "none" })}
+                            {r.streak}
+                          </div>
+                          <div style={{ fontSize: 9, color: C.dim }}>streak</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+          )}
+
+          {sub === "live" && (
+            liveNow.length === 0
+              ? <Empty msg="Nobody's live right now. Be the spark — hit Go Live up top." />
+              : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {liveNow.sort((a, b) => b.startedAt - a.startedAt).map((l, i) => (
+                    <div key={i} style={{ ...card, padding: "13px 14px", display: "flex", alignItems: "center", gap: 12,
+                      borderColor: "rgba(224,86,61,0.35)" }}>
+                      <span style={{ width: 10, height: 10, borderRadius: 99, background: C.red,
+                        animation: "lgndpulse 1.1s infinite", flexShrink: 0 }} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: C.text }}>
+                          {l.name}{l.team ? <span style={{ color: C.dim, fontWeight: 500 }}> · {l.team}</span> : ""}
+                        </div>
+                        <div style={{ fontSize: 12, color: C.gold }}>{l.activity}</div>
+                      </div>
+                      <div style={{ fontSize: 10.5, color: C.dim }}>{minsAgo(l.startedAt)}</div>
+                    </div>
+                  ))}
+                </div>
+          )}
+
+          {sub === "feed" && (
+            feed.length === 0
+              ? <Empty msg="The wall is quiet. Share a workout, verse, or breakthrough from Today tab." />
+              : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {feed.map((e) => {
+                    const meta = e.type === "workout" ? { icon: I.dumbbell, verb: "trained" }
+                      : e.type === "verse" ? { icon: I.book, verb: "read" }
+                      : e.type === "breakthrough" ? { icon: I.sparkles, verb: "broke through" }
+                      : e.type === "miracle" ? { icon: I.star, verb: "witnessed" }
+                      : { icon: I.activity, verb: "shared" };
+                    return (
+                      <div key={e.id} style={{ ...card, padding: "11px 13px", display: "flex", gap: 11 }}>
+                        <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, background: C.panel,
+                          border: "1px solid " + C.border, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          {meta.icon({ size: 16, color: C.amber })}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12.5, color: C.text }}>
+                            <b style={{ color: C.gold }}>{e.name}</b> <span style={{ color: C.dim }}>{meta.verb}</span>
+                          </div>
+                          <div style={{ fontSize: 13, color: C.text, marginTop: 2, lineHeight: 1.4 }}>{e.content}</div>
+                          <div style={{ fontSize: 10, color: C.dim, marginTop: 4 }}>Day {e.day} · {minsAgo(e.ts)}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+          )}
+        </>
+      );
+    }
+
+    /* ============================== ME VIEW ============================== */
+    function MeView({ profile, setProfile, stats, rank, td, days, showToast }) {
+      const [editing, setEditing] = useState(false);
+      const [name, setName] = useState(profile.name);
+      const [team, setTeam] = useState(profile.team || "");
+      const [shareModal, setShareModal] = useState(false);
+
+      const iron = isIron(stats.perfectDays);
+      const shareText =
+        "🔥 LGND-60 · Day " + td + "/" + TOTAL_DAYS + "\n" +
+        "✅ " + dayDone(days[td]) + "/6 disciplines today\n" +
+        "🔥 " + stats.streak + "-day streak · 🏆 " + stats.perfectDays + " perfect days\n" +
+        (iron ? "⚒️ IRON LEGENDARIO — 60 days complete\n" : "⭐ Rank: " + rank.cur.name + " (" + rank.cur.en + ")\n") +
+        "Forging a legend before TOP. #LGND60 #Legendarios";
+
+      const copyShare = async () => {
+        if (await copyText(shareText)) showToast("✓ Copied — go post it");
+        else setShareModal(true);
+      };
+
+      const saveProfile = () => {
+        setProfile(p => ({ ...p, name: name.trim() || p.name, team: team.trim() }));
+        setEditing(false);
+      };
+
+      return (
+        <>
+          <section style={{ ...card, padding: "22px 16px", textAlign: "center", position: "relative", overflow: "hidden" }}>
+            <div style={{ position: "absolute", inset: 0,
+              background: "radial-gradient(100% 70% at 50% 0%, rgba(245,166,35,0.12), transparent 60%)" }} />
+            <div style={{ position: "relative" }}>
+              <div style={{ width: 86, height: 86, margin: "0 auto 12px", borderRadius: 22,
+                background: iron ? "linear-gradient(135deg,#3a3d44,#5a5e66)" : "linear-gradient(135deg,#2a1d0c,#3a2810)",
+                border: "2px solid " + (iron ? IRON.mid : C.borderHi),
+                display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: iron ? "0 0 30px rgba(200,208,216,0.3)" : "0 0 28px rgba(245,166,35,0.2)" }}>
+                {I.crown({ size: 40, color: iron ? IRON.hi : C.gold })}
+              </div>
+              {editing ? (
+                <div style={{ maxWidth: 260, margin: "0 auto" }}>
+                  <input value={name} onChange={e => setName(e.target.value)}
+                    style={{ ...input, textAlign: "center", marginBottom: 8 }} />
+                  <input value={team} onChange={e => setTeam(e.target.value)} placeholder="Team / chapter"
+                    style={{ ...input, textAlign: "center" }} />
+                  <button onClick={saveProfile} style={{ ...primaryBtn, marginTop: 10 }}>Save</button>
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: C.text }}>{profile.name}
+                    <button onClick={() => setEditing(true)} style={{ ...iconBtn, marginLeft: 6 }}>
+                      {I.pencil({ size: 14, color: C.dim })}
+                    </button>
+                  </div>
+                  {profile.team && <div style={{ fontSize: 12, color: C.dim }}>{profile.team}</div>}
+                  {iron ? (
+                    <div style={{ display: "inline-block", marginTop: 10, padding: "6px 16px", borderRadius: 99,
+                      background: IRON.grad, color: "#1a1a1f", fontWeight: 900, fontSize: 13, letterSpacing: 1.5,
+                      boxShadow: "0 0 18px rgba(200,208,216,0.35)" }}>
+                      ⚒️ IRON LEGENDARIO
+                    </div>
+                  ) : (
+                    <div style={{ display: "inline-block", marginTop: 10, padding: "5px 14px", borderRadius: 99,
+                      background: "linear-gradient(135deg,#c97b2a,#f5a623)",
+                      color: "#1a0e00", fontWeight: 900, fontSize: 13, letterSpacing: 1 }}>
+                      {rank.cur.name.toUpperCase()} · {rank.cur.en}
+                    </div>
+                  )}
+                </>
+              )}
+
+              <div style={{ maxWidth: 280, margin: "16px auto 0" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: C.dim, marginBottom: 5 }}>
+                  <span>{stats.perfectDays}/{PERFECT_GOAL} complete days</span>
+                  <span>{iron ? "IRON earned ⚒️" : (PERFECT_GOAL - stats.perfectDays) + " to IRON"}</span>
+                </div>
+                <div style={{ height: 7, background: "#1a1510", borderRadius: 4, overflow: "hidden" }}>
+                  <div style={{ height: "100%",
+                    width: Math.min(100, (stats.perfectDays / PERFECT_GOAL) * 100) + "%",
+                    borderRadius: 4,
+                    background: iron ? IRON.grad : "linear-gradient(90deg,#c97b2a,#ffcf73)",
+                    transition: "width .5s" }} />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 9, marginTop: 12 }}>
+            {[{ v: stats.streak, l: "Streak" }, { v: stats.perfectDays, l: "Perfect" }, { v: stats.points, l: "Points" }].map((it, i) => (
+              <div key={i} style={{ ...card, padding: "13px 8px", textAlign: "center" }}>
+                <div style={{ fontSize: 22, fontWeight: 900, color: C.gold, lineHeight: 1 }}>{it.v}</div>
+                <div style={{ fontSize: 9.5, color: C.dim, textTransform: "uppercase", letterSpacing: 1, marginTop: 5 }}>{it.l}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <button onClick={copyShare} style={{ ...primaryBtn, flex: 1 }}>
+              {I.copy({ size: 15 })} Copy progress
+            </button>
+            <button onClick={() => openWA(shareText)} style={{ ...waBtn, flex: 1 }}>
+              {I.share({ size: 15 })} WhatsApp
+            </button>
+          </div>
+
+          <section style={{ ...card, marginTop: 14, padding: 15 }}>
+            <SectionTitle icon={I.award} text={"Achievements · " + BADGES.filter(b => b.get(stats) >= b.goal).length + "/" + BADGES.length} />
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 9, marginTop: 4 }}>
+              {BADGES.map(b => {
+                const cur = b.get(stats); const got = cur >= b.goal;
+                const pct = Math.min(100, Math.round((cur / b.goal) * 100));
+                return (
+                  <div key={b.id} style={{ textAlign: "center", padding: "12px 6px", borderRadius: 11,
+                    background: got ? C.panelHi : C.panel,
+                    border: "1px solid " + (got ? C.borderHi : C.border), opacity: got ? 1 : 0.85 }}>
+                    <div style={{ width: 40, height: 40, margin: "0 auto 7px", borderRadius: 11,
+                      background: got ? "linear-gradient(135deg,#c97b2a,#f5a623)" : "#161109",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      border: "1px solid " + (got ? "transparent" : C.faint) }}>
+                      {got ? b.icon({ size: 20, color: "#1a0e00" }) : I.lock({ size: 16, color: C.dim })}
+                    </div>
+                    <div style={{ fontSize: 10.5, fontWeight: 800, color: got ? C.gold : C.sub, lineHeight: 1.2 }}>{b.name}</div>
+                    <div style={{ fontSize: 8.5, color: C.dim, marginTop: 3, lineHeight: 1.3, minHeight: 22 }}>{b.desc}</div>
+                    {!got && (
+                      <div style={{ marginTop: 5, height: 3, background: "#1a1510", borderRadius: 2 }}>
+                        <div style={{ height: "100%", width: pct + "%", background: C.amber, borderRadius: 2 }} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <a href="https://chat.whatsapp.com/IPkjhZR4Rgt8KbJ5AML4vV?mode=gi_t" target="_blank" rel="noopener"
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              marginTop: 14, padding: "12px 14px", borderRadius: 10,
+              border: "1px solid rgba(31,138,82,0.4)", background: "rgba(31,138,82,0.10)",
+              color: "#46cf86", fontSize: 13, fontWeight: 800, textDecoration: "none",
+              letterSpacing: 0.4, textTransform: "uppercase" }}>
+            {I.users({ size: 16, color: "#46cf86" })} Join the LGND-60 WhatsApp Group
+          </a>
+
+          <div style={{ textAlign: "center", marginTop: 18, fontSize: 10, color: C.faint, lineHeight: 1.6 }}>
+            Same link = same brotherhood. Share with your camp.<br />Iron sharpens iron. 🔨
+          </div>
+
+          {shareModal && (
+            <div onClick={() => setShareModal(false)} style={{ position: "fixed", inset: 0, zIndex: 9999,
+              background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+              <div onClick={e => e.stopPropagation()} style={{ ...card, padding: 18, maxWidth: 340, width: "100%" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <b style={{ color: C.gold, fontSize: 14 }}>Copy your progress</b>
+                  <button onClick={() => setShareModal(false)} style={iconBtn}>{I.x({ size: 16, color: C.sub })}</button>
+                </div>
+                <textarea readOnly value={shareText} rows={6} onFocus={e => e.target.select()}
+                  style={{ ...input, resize: "none", lineHeight: 1.5, fontSize: 12 }} />
+                <div style={{ fontSize: 10.5, color: C.dim, marginTop: 8 }}>Tap, select all, copy.</div>
+              </div>
+            </div>
+          )}
+        </>
+      );
+    }
+
+    /* ============================== ONBOARDING ============================== */
+    function Onboarding({ onDone }) {
+      const [name, setName] = useState("");
+      const [team, setTeam] = useState("");
+      return (
+        <div style={{ minHeight: "100vh", background: C.bg, color: C.text,
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ width: "100%", maxWidth: 380, textAlign: "center" }}>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}><ForgeMark size={72} /></div>
+            <div style={{ fontSize: 30, fontWeight: 900, letterSpacing: 1, color: C.gold }}>LGND·60</div>
+            <div style={{ fontSize: 12, color: C.sub, letterSpacing: 1, marginTop: 6, lineHeight: 1.6 }}>
+              60 days. Six disciplines. One brotherhood.<br />Forge yourself before the next TOP.
+            </div>
+            <div style={{ margin: "26px 0 10px", textAlign: "left" }}>
+              <label style={lbl}>Your name</label>
+              <input autoFocus value={name} onChange={e => setName(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && name.trim() && onDone(name, team)}
+                placeholder="Brother's name" style={bigInput} />
+              <label style={{ ...lbl, marginTop: 14 }}>Team / chapter <span style={{ color: C.faint }}>(optional)</span></label>
+              <input value={team} onChange={e => setTeam(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && name.trim() && onDone(name, team)}
+                placeholder="Philly, Orlando, Camp 7…" style={bigInput} />
+            </div>
+            <button disabled={!name.trim()} onClick={() => name.trim() && onDone(name, team)} style={{
+              width: "100%", marginTop: 12, padding: "14px 0", borderRadius: 11, border: "none",
+              cursor: name.trim() ? "pointer" : "not-allowed",
+              background: name.trim() ? "linear-gradient(135deg,#c97b2a,#f5a623)" : "#241a0c",
+              color: name.trim() ? "#1a0e00" : C.dim, fontWeight: 900, fontSize: 15,
+              letterSpacing: 1, textTransform: "uppercase" }}>
+              Enter the Forge →
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    /* ============================== MAIN APP ============================== */
+    function App() {
+      const [loaded, setLoaded] = useState(false);
+      const [profile, setProfileState] = useState(null);
+      const [days, setDays] = useState({});
+      const [tab, setTab] = useState("today");
+      const [selectedDay, setSelectedDay] = useState(todayNum());
+      const [confetti, setConfetti] = useState(0);
+      const [toast, setToast] = useState(null);
+      const [live, setLive] = useState(null);
+      const [lb, setLb] = useState({});
+      const [liveMap, setLiveMap] = useState({});
+      const [feed, setFeed] = useState([]);
+      const [community, setCommunity] = useState({ count: 0, iron: 0 });
+      const [syncing, setSyncing] = useState(false);
+
+      const lastPerfect = useRef(new Set());
+
+      const showToast = useCallback((msg) => {
+        setToast(msg);
+        setTimeout(() => setToast(null), 2600);
+      }, []);
+
+      const setProfile = (updater) => setProfileState(p => typeof updater === "function" ? updater(p) : updater);
+
+      // Load on mount
+      useEffect(() => {
+        const me = lsGet(LS.ME);
+        if (me) {
+          setProfileState(me.profile || null);
+          setDays(me.days || {});
+          const seen = new Set();
+          Object.entries(me.days || {}).forEach(([k, v]) => { if (dayDone(v) === TASKS.length) seen.add(k); });
+          lastPerfect.current = seen;
+        }
+        refreshShared();
+        setLoaded(true);
+      }, []);
+
+      const stats = useMemo(() => computeStats(days), [days]);
+      const rank = useMemo(() => rankFor(stats.points), [stats.points]);
+
+      // Save personal data locally
+      useEffect(() => {
+        if (!loaded || !profile) return;
+        lsSet(LS.ME, { profile, days });
+      }, [profile, days, loaded]);
+
+      // Refresh shared data from Supabase (with localStorage fallback)
+      const refreshShared = useCallback(async () => {
+        setSyncing(true);
+        try {
+          const [newLb, newLive, newFeed] = await Promise.all([
+            api.fetchLeaderboard(), api.fetchLive(), api.fetchFeed(),
+          ]);
+          setLb(newLb);
+          setLiveMap(newLive);
+          setFeed(Array.isArray(newFeed) ? newFeed : []);
+          setCommunity({
+            count: Object.keys(newLb).length,
+            iron: Object.values(newLb).filter(v => isIron(v.perfectDays)).length,
+          });
+        } catch (e) { console.warn("refresh failed:", e); }
+        setTimeout(() => setSyncing(false), 300);
+      }, []);
+
+      // Push my stats to shared leaderboard (debounced)
+      useEffect(() => {
+        if (!loaded || !profile) return;
+        const t = setTimeout(async () => {
+          const summary = {
+            userId: profile.userId, name: profile.name, team: profile.team || "",
+            points: stats.points, streak: stats.streak, perfectDays: stats.perfectDays,
+            daysLogged: stats.daysLogged, rank: rank.cur.name, lastActive: Date.now(),
+          };
+          await api.upsertUser(summary);
+          // refresh leaderboard locally so my row shows up immediately
+          const newLb = { ...(lsGet(LS.LB) || {}), [profile.userId]: summary };
+          lsSet(LS.LB, newLb);
+          setLb(newLb);
+          setCommunity({
+            count: Object.keys(newLb).length,
+            iron: Object.values(newLb).filter(v => isIron(v.perfectDays)).length,
+          });
+        }, 800);
+        return () => clearTimeout(t);
+      }, [stats, profile, rank, loaded]);
+
+      // Poll for updates every 12s + listen to cross-tab changes
+      useEffect(() => {
+        const handler = (e) => {
+          if (e.key === LS.LB || e.key === LS.LIVE || e.key === LS.FEED) refreshShared();
+        };
+        window.addEventListener("storage", handler);
+        const poll = setInterval(refreshShared, 12000);
+        return () => { window.removeEventListener("storage", handler); clearInterval(poll); };
+      }, [refreshShared]);
+
+      // Confetti on perfect day
+      useEffect(() => {
+        if (!loaded) return;
+        Object.entries(days).forEach(([k, v]) => {
+          const perfect = dayDone(v) === TASKS.length;
+          if (perfect && !lastPerfect.current.has(k)) {
+            lastPerfect.current.add(k);
+            setConfetti(x => x + 1);
+            showToast("🎉 Perfect day forged. +100");
+          } else if (!perfect && lastPerfect.current.has(k)) {
+            lastPerfect.current.delete(k);
+          }
+        });
+      }, [days, loaded]);
+
+      const dayObj = days[selectedDay] || { tasks: {}, calls: [] };
+      const setDay = useCallback((updater) => {
+        setDays(prev => {
+          const cur = prev[selectedDay] || { tasks: {}, calls: [] };
+          const next = typeof updater === "function" ? updater(cur) : updater;
+          return { ...prev, [selectedDay]: { ...cur, ...next } };
+        });
+      }, [selectedDay]);
+
+      const toggleTask = (id) => {
+        if (id === "call") return;
+        setDay(cur => ({ tasks: { ...(cur.tasks || {}), [id]: !(cur.tasks && cur.tasks[id]) } }));
+      };
+
+      const goLive = async (activity) => {
+        if (!profile) return;
+        const sess = { userId: profile.userId, name: profile.name, team: profile.team || "", activity, startedAt: Date.now() };
+        setLive(sess);
+        const newLive = { ...(lsGet(LS.LIVE) || {}), [profile.userId]: sess };
+        lsSet(LS.LIVE, newLive);
+        setLiveMap(newLive);
+        showToast("📡 You're live: " + activity);
+        await api.setLive(sess);
+      };
+
+      const endLive = async () => {
+        if (!profile) return;
+        setLive(null);
+        const newLive = { ...(lsGet(LS.LIVE) || {}) };
+        delete newLive[profile.userId];
+        lsSet(LS.LIVE, newLive);
+        setLiveMap(newLive);
+        await api.endLive(profile.userId);
+      };
+
+      const pushFeed = async (type, content) => {
+        if (!profile || !content || !content.trim()) return;
+        const entry = {
+          id: newId(), userId: profile.userId, name: profile.name, team: profile.team || "",
+          type, content: content.trim(), day: selectedDay, ts: Date.now(),
+        };
+        const newFeed = [entry, ...(lsGet(LS.FEED) || [])].slice(0, 120);
+        lsSet(LS.FEED, newFeed);
+        setFeed(newFeed);
+        showToast("✓ Shared with the brotherhood");
+        const updated = await api.pushFeed(entry);
+        if (Array.isArray(updated)) setFeed(updated);
+      };
+
+      if (!loaded) {
+        return (
+          <div style={{ minHeight: "100vh", background: C.bg, color: C.gold,
+            display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ textAlign: "center" }}>
+              <ForgeMark size={60} />
+              <div style={{ marginTop: 14, letterSpacing: 4, fontSize: 12, color: C.dim }}>LOADING THE FORGE…</div>
+            </div>
+          </div>
+        );
+      }
+
+      if (!profile) {
+        return <Onboarding onDone={(name, team) => {
+          const p = { userId: newId(), name: name.trim(), team: team.trim() };
+          setProfileState(p);
+          lsSet(LS.ME, { profile: p, days: {} });
+        }} />;
+      }
+
+      const td = todayNum();
+      const daysLeft = TOTAL_DAYS - td;
+
+      return (
+        <div style={{ minHeight: "100vh", background: C.bg, color: C.text, position: "relative" }}>
+          <Confetti fire={confetti} />
+          {toast && (
+            <div style={{ position: "fixed", top: 14, left: "50%", transform: "translateX(-50%)", zIndex: 9998,
+              background: "rgba(20,15,6,0.97)", border: "1px solid " + C.borderHi, color: C.gold,
+              padding: "9px 16px", borderRadius: 10, fontSize: 13, fontWeight: 700,
+              boxShadow: "0 8px 30px rgba(0,0,0,0.6)" }}>
+              {toast}
+            </div>
+          )}
+
+          {/* Header */}
+          <header style={{ position: "sticky", top: 0, zIndex: 50,
+            background: "linear-gradient(180deg,#120a02 0%, rgba(8,8,12,0.92) 100%)",
+            borderBottom: "1px solid " + C.border, padding: "12px 16px" }}>
+            <div style={{ maxWidth: 540, margin: "0 auto", display: "flex", alignItems: "center", gap: 11 }}>
+              <ForgeMark size={38} />
+              <div>
+                <div style={{ fontSize: 17, fontWeight: 900, letterSpacing: 1, color: C.gold, lineHeight: 1 }}>
+                  LGND<span style={{ color: C.amber }}>·</span>60
+                </div>
+                <div style={{ fontSize: 9, color: sbReady() ? C.dim : C.red, letterSpacing: 2.5, textTransform: "uppercase", marginTop: 2 }}>
+                  Forge a Legend{sbReady() ? "" : " · offline"}
+                </div>
+              </div>
+              <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 4, color: C.gold, fontWeight: 800, fontSize: 14 }}>
+                  {I.flame({ size: 16, color: C.gold, fill: stats.streak > 0 ? C.gold : "none" })}
+                  {stats.streak}
+                </div>
+                <button onClick={() => live ? endLive() : goLive("Grinding")} style={{
+                  display: "flex", alignItems: "center", gap: 5, padding: "6px 11px", borderRadius: 8, cursor: "pointer",
+                  fontSize: 11, fontWeight: 800, letterSpacing: 0.5, textTransform: "uppercase",
+                  border: "1px solid " + (live ? C.red : C.borderHi),
+                  background: live ? "rgba(224,86,61,0.18)" : "transparent",
+                  color: live ? C.red : C.gold }}>
+                  <span style={{ width: 7, height: 7, borderRadius: 99,
+                    background: live ? C.red : C.gold,
+                    animation: live ? "lgndpulse 1.1s infinite" : "none" }} />
+                  {live ? "Live" : "Go Live"}
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <main style={{ maxWidth: 540, margin: "0 auto", padding: "16px 14px 96px" }}>
+            {tab === "today" && <TodayView stats={stats} td={td} daysLeft={daysLeft} profile={profile} community={community}
+              selectedDay={selectedDay} setSelectedDay={setSelectedDay} dayObj={dayObj} setDay={setDay} toggleTask={toggleTask}
+              pushFeed={pushFeed} showToast={showToast} />}
+            {tab === "brothers" && <BrothersView profile={profile} community={community} lb={lb} liveMap={liveMap} feed={feed} refresh={refreshShared} loading={syncing} />}
+            {tab === "me" && <MeView profile={profile} setProfile={setProfile} stats={stats} rank={rank} td={td} days={days} showToast={showToast} />}
+          </main>
+
+          {/* Bottom nav */}
+          <nav style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 50,
+            background: "rgba(10,8,4,0.97)", borderTop: "1px solid " + C.border }}>
+            <div style={{ maxWidth: 540, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(3,1fr)" }}>
+              {[
+                { id: "today", label: "Today", icon: I.home },
+                { id: "brothers", label: "Brothers", icon: I.users },
+                { id: "me", label: "Me", icon: I.award },
+              ].map(t => {
+                const on = tab === t.id;
+                return (
+                  <button key={t.id} onClick={() => setTab(t.id)} style={{
+                    background: "none", border: "none", cursor: "pointer", padding: "10px 0 12px",
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+                    color: on ? C.gold : C.dim, position: "relative" }}>
+                    {on && <span style={{ position: "absolute", top: 0, width: 26, height: 2, borderRadius: 2, background: C.gold }} />}
+                    {t.icon({ size: 20 })}
+                    <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4 }}>{t.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
+        </div>
+      );
+    }
+
+    /* ============================== RENDER ============================== */
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+</body>
+</html>
